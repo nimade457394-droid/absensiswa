@@ -8,12 +8,13 @@
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8fafc; padding: 15px; margin: 0; }
         .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        #reader { width: 100%; margin-top: 15px; }
+        #reader { width: 100%; margin-top: 15px; border-radius: 8px; overflow: hidden; }
         .status { margin-top: 15px; padding: 12px; font-weight: bold; border-radius: 8px; font-size: 0.95rem; }
         .info { background: #e0f2fe; color: #0369a1; }
-        .success { background: #dcfce7; color: #15803d; }
+        .success { background: #dcfce7; color: #15803d; font-size: 1.1rem; }
         .error { background: #fee2e2; color: #b91c1c; }
         input { width: 90%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; text-align: center; font-size: 1rem; }
+        .btn-cam { background: #0284c7; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; margin-bottom: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -24,112 +25,137 @@
     <input type="number" id="nisInput" placeholder="Masukkan NIS Kamu..." />
     
     <div id="gpsStatus" class="status info">Mengecek Lokasi GPS...</div>
-    <div id="reader" style="display:none;"></div>
+    
+    <div id="camArea" style="display:none; margin-top: 15px;">
+        <button id="switchCamBtn" class="btn-cam" onclick="switchCamera()">📷 Ganti Kamera (Belakang/Depan)</button>
+        <div id="reader"></div>
+    </div>
+
     <div id="resultStatus"></div>
 </div>
 
 <script>
     // 1. SETTING UTAMA
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzZzQHoeL9Z8hHwHzPpPKfBfgXuAV2z4hcPciVkoicnDb9Vr2KGnTlnr6hq3jooTD27/exec";
-    
-    // Koordinat Titik Tengah Sekolah (Contoh: Monas Jakarta, ganti dengan koordinat sekolahmu)
-    const SCHOOL_LAT = -8.562523; 
-    const SCHOOL_LNG = 115.257547; 
-    const MAX_RADIUS_METERS = 50; // Jarak toleransi maksimal (50 meter)
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzZzQHoeL9Z8hHwHzPpPKfBfgXuAV2z4hcPciVkoicnDb9Vr2KGnTlnr6hq3jooTD27/exec"; 
+    const SCHOOL_LAT = -6.175392; // Ganti koordinat sekolahmu
+    const SCHOOL_LNG = 106.827153; 
+    const MAX_RADIUS_METERS = 50; 
 
     let isProcessing = false;
+    let html5QrCode = null;
+    let currentFacingMode = "environment"; // Default kamera belakang
 
-    // 2. HITUNG JARAK GPS (Haversine Formula)
+    // 2. HITUNG JARAK GPS
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // Radius bumi dalam meter
+        const R = 6371e3;
         const φ1 = lat1 * Math.PI / 180;
         const φ2 = lat2 * Math.PI / 180;
         const Δφ = (lat2 - lat1) * Math.PI / 180;
         const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; 
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))); 
     }
 
     // 3. CEK LOKASI SISWA
     if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                const userLat = position.coords.latitude;
-                const userLng = position.coords.longitude;
-                const distance = getDistanceInMeters(userLat, userLng, SCHOOL_LAT, SCHOOL_LNG);
-
+                const distance = getDistanceInMeters(position.coords.latitude, position.coords.longitude, SCHOOL_LAT, SCHOOL_LNG);
                 const gpsDiv = document.getElementById("gpsStatus");
+
                 if (distance <= MAX_RADIUS_METERS) {
                     gpsDiv.className = "status success";
                     gpsDiv.innerText = "Lokasi Valid! (Jarak: " + Math.round(distance) + "m)";
-                    document.getElementById("reader").style.display = "block";
-                    startScanner();
+                    document.getElementById("camArea").style.display = "block";
+                    startScanner(currentFacingMode);
                 } else {
                     gpsDiv.className = "status error";
-                    gpsDiv.innerText = "Di Luar Area Sekolah! Jarak kamu: " + Math.round(distance) + " meter dari gerbang.";
+                    gpsDiv.innerText = "Di Luar Area Sekolah! Jarak kamu: " + Math.round(distance) + " meter.";
                 }
             },
-            (error) => {
+            () => {
                 document.getElementById("gpsStatus").className = "status error";
                 document.getElementById("gpsStatus").innerText = "Gagal mengakses GPS. Wajib izinkan akses Lokasi!";
             },
             { enableHighAccuracy: true }
         );
-    } else {
-        alert("Browser kamu tidak mendukung Geolocation GPS.");
     }
 
-    // 4. SCANNER QR
-    function startScanner() {
-        let scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
-        scanner.render((decodedText) => {
-            if (isProcessing) return;
+    // 4. MENGATUR KAMERA (Bisa Tukar Kamera Depan/Belakang)
+    function startScanner(facingMode) {
+        if (html5QrCode) {
+            html5QrCode.stop().then(() => { initCamera(facingMode); }).catch(() => { initCamera(facingMode); });
+        } else {
+            initCamera(facingMode);
+        }
+    }
 
-            const nis = document.getElementById("nisInput").value;
-            if (!nis) {
-                alert("Masukkan NIS kamu terlebih dahulu sebelum scan!");
-                return;
-            }
+    function initCamera(facingMode) {
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
-            isProcessing = true;
-            const resDiv = document.getElementById("resultStatus");
-            resDiv.className = "status info";
-            resDiv.innerText = "Memverifikasi data ke server...";
+        html5QrCode.start(
+            { facingMode: facingMode },
+            config,
+            (decodedText) => {
+                if (isProcessing) return;
 
-            try {
-                let qrPayload = JSON.parse(decodedText);
-                
-                fetch(GAS_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        nis: nis,
-                        token: qrPayload.token,
-                        timestamp: qrPayload.timestamp
+                const nis = document.getElementById("nisInput").value;
+                if (!nis) {
+                    alert("Masukkan NIS kamu terlebih dahulu!");
+                    return;
+                }
+
+                isProcessing = true;
+                const resDiv = document.getElementById("resultStatus");
+                resDiv.className = "status info";
+                resDiv.innerText = "Memverifikasi data...";
+
+                try {
+                    let qrPayload = JSON.parse(decodedText);
+                    
+                    // Mengirimkan data ke Apps Script menggunakan Form Body
+                    fetch(GAS_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: "nis=" + encodeURIComponent(nis) + 
+                              "&token=" + encodeURIComponent(qrPayload.token) + 
+                              "&timestamp=" + encodeURIComponent(qrPayload.timestamp)
                     })
-                })
-                .then(() => {
-                    resDiv.className = "status success";
-                    resDiv.innerText = "Absen Berhasil Di-scan!";
-                    setTimeout(() => { location.reload(); }, 3000);
-                })
-                .catch(err => {
-                    resDiv.className = "status error";
-                    resDiv.innerText = "Gagal mengirim data.";
-                    isProcessing = false;
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === "success") {
+                            resDiv.className = "status success";
+                            // TAMPILAN NOTIFIKASI SELAMAT DATANG DENGAN NAMA SISWA
+                            resDiv.innerHTML = "🎉 <b>Selamat datang di Sekolah " + data.nama + "</b>";
+                            
+                            html5QrCode.stop().then(() => {
+                                setTimeout(() => { location.reload(); }, 4000);
+                            });
+                        } else {
+                            resDiv.className = "status error";
+                            resDiv.innerText = data.message;
+                            isProcessing = false;
+                        }
+                    })
+                    .catch(() => {
+                        resDiv.className = "status error";
+                        resDiv.innerText = "Gagal terhubung ke server.";
+                        isProcessing = false;
+                    });
 
-            } catch (e) {
-                resDiv.className = "status error";
-                resDiv.innerText = "QR Code tidak valid!";
-                isProcessing = false;
+                } catch (e) {
+                    resDiv.className = "status error";
+                    resDiv.innerText = "QR Code tidak valid!";
+                    isProcessing = false;
+                }
             }
-        });
+        );
+    }
+
+    function switchCamera() {
+        currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+        startScanner(currentFacingMode);
     }
 </script>
 
