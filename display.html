@@ -7,14 +7,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #0f172a; color: white; margin: 0; padding: 20px; }
-        .card { background: #1e293b; display: inline-block; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-top: 30px; }
+        .logo { width: 100px; height: auto; margin-top: 10px; margin-bottom: 10px; }
+        .card { background: #1e293b; display: inline-block; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-top: 20px; }
         #qrcode { background: white; padding: 20px; border-radius: 12px; display: inline-block; }
         .timer { font-size: 1.2rem; color: #38bdf8; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-    <h1>SISTEM ABSENSI SMA NEGERI 1</h1>
+    <!-- Ganti URL di bawah dengan link logo sekolahmu (PNG/JPG) -->
+    <img src="https://i.ibb.co.com/SY0R8c8/images.jpg" alt="Logo Sekolah" class="logo" id="schoolLogo">
+
+    <h1 style="margin-top: 10px;">SISTEM ABSENSI SMP NEGERI 3 UBUD</h1>
     <p>Silakan scan QR Code di bawah ini menggunakan HP kamu saat berada di area sekolah</p>
 
     <div class="card">
@@ -23,18 +27,15 @@
     </div>
 
     <script>
-        const SECRET_KEY = "SEKOLAH_KITA_RAHASIA_123"; // Harus sama dengan di Apps Script
+        const SECRET_KEY = "SEKOLAH_KITA_RAHASIA_123";
         let qrcode = new QRCode(document.getElementById("qrcode"), { width: 280, height: 280 });
         
-        // Diubah menjadi 10 detik
         const REFRESH_INTERVAL = 10; 
         let timeLeft = REFRESH_INTERVAL;
 
         function generateQR() {
             let timestamp = new Date().getTime();
             let token = CryptoJS.SHA256(SECRET_KEY + "_" + timestamp).toString();
-            
-            // Format isi QR: JSON string
             let qrData = JSON.stringify({ token: token, timestamp: timestamp });
             qrcode.makeCode(qrData);
         }
