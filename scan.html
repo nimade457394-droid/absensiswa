@@ -114,19 +114,22 @@
                 try {
                     let qrPayload = JSON.parse(decodedText);
                     
+                    // Mengirimkan data JSON ke Apps Script
                     fetch(GAS_URL, {
                         method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: "nis=" + encodeURIComponent(nis) + 
-                              "&token=" + encodeURIComponent(qrPayload.token) + 
-                              "&timestamp=" + encodeURIComponent(qrPayload.timestamp)
+                        headers: { "Content-Type": "text/plain;charset=utf-8" },
+                        body: JSON.stringify({
+                            nis: nis,
+                            token: qrPayload.token,
+                            timestamp: qrPayload.timestamp
+                        })
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === "success") {
                             resDiv.className = "status success";
-                            // NOTIFIKASI TAMPIL DENGAN NAMA SISWA
-                            resDiv.innerHTML = "🎉 <b>Selamat datang " + data.nama + "</b>";
+                            // NOTIFIKASI DENGAN NAMA SISWA
+                            resDiv.innerHTML = "🎉 <b>Selamat datang di Sekolah " + data.nama + "</b>";
                             
                             html5QrCode.stop().then(() => {
                                 setTimeout(() => { location.reload(); }, 3000);
