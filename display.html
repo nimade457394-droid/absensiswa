@@ -19,13 +19,16 @@
 
     <div class="card">
         <div id="qrcode"></div>
-        <div class="timer">QR Code diperbarui otomatis tiap <span id="countdown">5</span> detik</div>
+        <div class="timer">QR Code diperbarui otomatis tiap <span id="countdown">10</span> detik</div>
     </div>
 
     <script>
-        const SECRET_KEY = "SEKOLAH_KITA_RAHASIA_123"; // Harus sama dengan di Apps Script & Scan
+        const SECRET_KEY = "SEKOLAH_KITA_RAHASIA_123"; // Harus sama dengan di Apps Script
         let qrcode = new QRCode(document.getElementById("qrcode"), { width: 280, height: 280 });
-        let timeLeft = 5;
+        
+        // Diubah menjadi 10 detik
+        const REFRESH_INTERVAL = 10; 
+        let timeLeft = REFRESH_INTERVAL;
 
         function generateQR() {
             let timestamp = new Date().getTime();
@@ -43,7 +46,7 @@
             document.getElementById("countdown").innerText = timeLeft;
             if (timeLeft <= 0) {
                 generateQR();
-                timeLeft = 5;
+                timeLeft = REFRESH_INTERVAL;
             }
         }, 1000);
     </script>
