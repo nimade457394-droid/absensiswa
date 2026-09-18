@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absen Siswa</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f8fafc; padding: 15px; margin: 0; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        #reader { width: 100%; margin-top: 15px; }
+        .status { margin-top: 15px; padding: 12px; font-weight: bold; border-radius: 8px; font-size: 0.95rem; }
+        .info { background: #e0f2fe; color: #0369a1; }
+        .success { background: #dcfce7; color: #15803d; }
+        .error { background: #fee2e2; color: #b91c1c; }
+        input { width: 90%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; text-align: center; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h3>Absensi Masuk Sekolah</h3>
+    
+    <input type="number" id="nisInput" placeholder="Masukkan NIS Kamu..." />
+    
+    <div id="gpsStatus" class="status info">Mengecek Lokasi GPS...</div>
+    <div id="reader" style="display:none;"></div>
+    <div id="resultStatus"></div>
+</div>
+
+<script>
+    // 1. SETTING UTAMA
+    const GAS_URL = "PASANG_WEB_APP_URL_GOOGLE_APPS_SCRIPT_DI_SINI";
+    
+    // Koordinat Titik Tengah Sekolah (Contoh: Monas Jakarta, ganti dengan koordinat sekolahmu)
+    const SCHOOL_LAT = -6.175392; 
+    const SCHOOL_LNG = 106.827153; 
+    const MAX_RADIUS_METERS = 50; // Jarak toleransi maksimal (50 meter)
+
+    let isProcessing = false;
+
+    // 2. HITUNG JARAK GPS (Haversine Formula)
+    function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+        const R = 6371e3; // Radius bumi dalam meter
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; 
+    }
+
+    // 3. CEK LOKASI SISWA
+    if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                const distance = getDistanceInMeters(userLat, userLng, SCHOOL_LAT, SCHOOL_LNG);
+
+                const gpsDiv = document.getElementById("gpsStatus");
+                if (distance <= MAX_RADIUS_METERS) {
+                    gpsDiv.className = "status success";
+                    gpsDiv.innerText = "Lokasi Valid! (Jarak: " + Math.round(distance) + "m)";
+                    document.getElementById("reader").style.display = "block";
+                    startScanner();
+                } else {
+                    gpsDiv.className = "status error";
+                    gpsDiv.innerText = "Di Luar Area Sekolah! Jarak kamu: " + Math.round(distance) + " meter dari gerbang.";
+                }
+            },
+            (error) => {
+                document.getElementById("gpsStatus").className = "status error";
+                document.getElementById("gpsStatus").innerText = "Gagal mengakses GPS. Wajib izinkan akses Lokasi!";
+            },
+            { enableHighAccuracy: true }
+        );
+    } else {
+        alert("Browser kamu tidak mendukung Geolocation GPS.");
+    }
+
+    // 4. SCANNER QR
+    function startScanner() {
+        let scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+        scanner.render((decodedText) => {
+            if (isProcessing) return;
+
+            const nis = document.getElementById("nisInput").value;
+            if (!nis) {
+                alert("Masukkan NIS kamu terlebih dahulu sebelum scan!");
+                return;
+            }
+
+            isProcessing = true;
+            const resDiv = document.getElementById("resultStatus");
+            resDiv.className = "status info";
+            resDiv.innerText = "Memverifikasi data ke server...";
+
+            try {
+                let qrPayload = JSON.parse(decodedText);
+                
+                fetch(GAS_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        nis: nis,
+                        token: qrPayload.token,
+                        timestamp: qrPayload.timestamp
+                    })
+                })
+                .then(() => {
+                    resDiv.className = "status success";
+                    resDiv.innerText = "Absen Berhasil Di-scan!";
+                    setTimeout(() => { location.reload(); }, 3000);
+                })
+                .catch(err => {
+                    resDiv.className = "status error";
+                    resDiv.innerText = "Gagal mengirim data.";
+                    isProcessing = false;
+                });
+
+            } catch (e) {
+                resDiv.className = "status error";
+                resDiv.innerText = "QR Code tidak valid!";
+                isProcessing = false;
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
