@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Layar Absensi Sekolah</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #0f172a; color: white; margin: 0; padding: 20px; }
+        .card { background: #1e293b; display: inline-block; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-top: 30px; }
+        #qrcode { background: white; padding: 20px; border-radius: 12px; display: inline-block; }
+        .timer { font-size: 1.2rem; color: #38bdf8; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <h1>SISTEM ABSENSI SMA NEGERI 1</h1>
+    <p>Silakan scan QR Code di bawah ini menggunakan HP kamu saat berada di area sekolah</p>
+
+    <div class="card">
+        <div id="qrcode"></div>
+        <div class="timer">QR Code diperbarui otomatis tiap <span id="countdown">5</span> detik</div>
+    </div>
+
+    <script>
+        const SECRET_KEY = "SEKOLAH_KITA_RAHASIA_123"; // Harus sama dengan di Apps Script & Scan
+        let qrcode = new QRCode(document.getElementById("qrcode"), { width: 280, height: 280 });
+        let timeLeft = 5;
+
+        function generateQR() {
+            let timestamp = new Date().getTime();
+            let token = CryptoJS.SHA256(SECRET_KEY + "_" + timestamp).toString();
+            
+            // Format isi QR: JSON string
+            let qrData = JSON.stringify({ token: token, timestamp: timestamp });
+            qrcode.makeCode(qrData);
+        }
+
+        generateQR();
+
+        setInterval(() => {
+            timeLeft--;
+            document.getElementById("countdown").innerText = timeLeft;
+            if (timeLeft <= 0) {
+                generateQR();
+                timeLeft = 5;
+            }
+        }, 1000);
+    </script>
+
+</body>
+</html>
